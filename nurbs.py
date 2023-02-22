@@ -9,9 +9,17 @@ from scipy import special, integrate
 @dataclass
 class Config:
     at = None
+    nat = None
     dat = None
     an = None
     arclength = 0
+
+
+class Material:
+    def __init__(self, E=1, A=1, I=1):
+        self.E = E
+        self.A = A
+        self.I = I
 
 
 class Curve:
@@ -340,10 +348,12 @@ class Beam(Curve):
         self.set_config(self.ref)
         self.strain = np.zeros([2, self.int_pts.size], dtype=float)
         self.stress = np.zeros_like(self.strain)
+        self.mat = Material()
 
     def set_config(self, config):
         der = self.derivatives(self.int_pts, 2)
         config.at = der[1]
+        config.nat = np.linalg.norm(config.at, axis=0)
         config.dat = der[2]
         config.an = self.R @ self.ref.at
 
@@ -358,13 +368,58 @@ class Beam(Curve):
         self.strain[0] -= np.einsum('ij,ij->j', self.ref.at, self.ref.at) / 2
         self.strain[1] = np.einsum('ij,ij->j', self.ref.an, self.ref.dat)
         self.strain[1] -= np.einsum('ij,ij->j', self.cur.an, self.cur.dat)
-
         return self.strain
 
-    def compute_stress(self, youngs_modulus=1, area=1, second_moment_of_area=1):
-        self.stress[0] = youngs_modulus * area * self.strain[0]
-        self.stress[1] = youngs_modulus * second_moment_of_area * self.strain[1]
+    def compute_stress(self):
+        self.stress[0] = self.mat.E * self.mat.A * self.strain[0]
+        self.stress[1] = self.mat.E * self.mat.I * self.strain[1]
         return self.stress
+
+    def compute_stiffness(self):
+        K = self.compute_stiffness_linear()
+        H = self.compute_stiffness_nonlinear()
+        A = K + H
+        return A
+
+    def compute_stiffness_linear(self):
+        B = np.sum(self.compute_bmatrix(), axis=2)
+        DB = 1.0 * B
+        DB[:, 0] *= self.mat.E * self.mat.A
+        DB[:, 1] *= self.mat.E * self.mat.A
+        K = DB @ B.T
+        return K
+
+    def compute_stiffness_nonlinear(self):
+        n = 2 * (self.n + 1)
+        H = np.zeros([n, n], dtype=float)
+        for pt in range(self.int_pts.size):
+            dN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=1)
+            ddN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=2)
+            at = self.cur.at[:, pt]
+            dat = self.cur.dat[:, pt]
+            nat = self.cur.nat[pt]
+            A = np.outer(at, at)
+            for i in range(self.n + 1):
+                for j in range(self.n + 1):
+                    H[2*i:2*i+2, 2*j:2*j+2] += ddN[i] * dN[j] * nat**-1 * (nat**-2 * self.R @ A - self.R)
+                    H[2 * i:2 * i + 2, 2 * j:2 * j + 2] += ddN[j] * dN[i] * nat**-1 * self.R - nat**-3 * A @ self.R
+                    H[2 * i:2 * i + 2, 2 * j:2 * j + 2] += dN[i] * dN[j] * nat**-3 * (np.dot(dat, self.R @ at) * np.identity(2) + np.outer(at, dat) @ self.R + 3 * nat**-2 * np.outer(at, dat) @ self.R @ A - self.R @ np.outer(dat, at))
+        return H
+
+    def compute_bmatrix(self):
+        # Size of bmatrix is 2 x 2 per control point per evaluation point
+        # Total size is 2n x 2 x neval_pts
+        n = self.n
+        B = np.zeros([2 * n, 2, self.int_pts.size])
+        norma1 = np.linalg.norm(self.cur.at, axis=0)
+        for i in range(n):
+            j = 2*i
+            k = j + 2
+            B[j:k, 0, :] += self.cur.at
+            B[j:k, 1, :] -= self.cur.an
+            B[j:k, 1, :] -= np.multiply(norma1**-3, np.einsum('ij,jik->jk', self.cur.dat, self.R @ np.einsum('i...,j...', self.cur.at, self.cur.at)).T)
+            B[j:k, 1, :] -= np.multiply(norma1**-1, np.einsum('jl,jk->kl', self.cur.dat, self.R))
+        return B
 
 
 @nb.jit(nopython=True, cache=True)
