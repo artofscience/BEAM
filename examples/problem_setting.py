@@ -9,8 +9,8 @@ ctrlpts_ref = np.array([[0, 0], [1, 0], [2, -1], [3, -1.5], [3.5, -2], [4.5, -1]
 u = np.array([[0, 0], [0.2, 0], [0, 2], [-0.1, 3], [0.1, 2], [-0.2, 3]], dtype=float)
 ctrlpts_cur = ctrlpts_ref + u
 
-beam_ref = Curve(ctrlpts=ctrlpts_ref.T, degree=3, knots=knots)
-beam_cur = Curve(ctrlpts=ctrlpts_cur.T, degree=beam_ref.p, knots=beam_ref.U)
+beam_ref = Curve(3, ctrlpts_ref.T, knots)
+beam_cur = Curve(3, ctrlpts_cur.T, beam_ref.U)
 
 # plot current and deformed config
 fig, ax = plot(beam_ref, frenet_serret=True)

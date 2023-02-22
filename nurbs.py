@@ -1,8 +1,9 @@
+from dataclasses import dataclass
+
+import matplotlib.pyplot as plt
 import numba as nb
 import numpy as np
 from scipy import special, integrate
-import matplotlib.pyplot as plt
-from dataclasses import dataclass
 
 
 @dataclass
@@ -520,7 +521,8 @@ def basis_polynomials_derivatives(n, p, U, u, derivative_order):
     return N_ders
 
 
-def plot(crv, u=np.linspace(0, 1, 100), fig=None, ax=None, curve=True, knots=True, control_points=True, frenet_serret=False, axis_off=False,
+def plot(crv, u=np.linspace(0, 1, 100), fig=None, ax=None, curve=True, knots=True, control_points=True,
+         frenet_serret=False, axis_off=False,
          ticks_off=False):
     """ Create a plot and return the figure and axes handles """
 

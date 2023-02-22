@@ -11,7 +11,7 @@ ctrlpts = np.array([[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0],
 
 weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
 
-circle = Curve(ctrlpts.T, weights, 2, knots)
+circle = Curve(2, ctrlpts.T, knots, weights)
 
 plot(circle, frenet_serret=True)
 plt.show()
