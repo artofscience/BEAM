@@ -181,7 +181,7 @@ class Curve:
 
     def derivatives(self, u, up_to_order):
 
-        """ Compute the derivatives of a NURBS curve in ordinary space up to the desired order
+        """ Compute the derivatives of a NURBS curve up to the desired order
 
         This function computes the analytic derivatives of the NURBS curve in ordinary space using equation 4.8 and
         the derivatives of the NURBS curve in homogeneous space obtained from compute_bspline_derivatives()
@@ -205,7 +205,7 @@ class Curve:
 
         """
 
-        # Map the control points to homogeneous space | P_w = (x*w,y*w,z*w,w)
+        # Map the control points to homogeneous space | P_w = (x*w,y*w,w)
         P_w = np.concatenate((self.P * self.W[np.newaxis, :], self.W[np.newaxis, :]), axis=0)
 
         # Compute the derivatives of the NURBS curve in homogeneous space
@@ -240,18 +240,6 @@ class Curve:
 
         Parameters
         ----------
-        P : ndarray with shape (ndim, n+1)
-            Array containing the coordinates of the control points
-            The first dimension of ´P´ spans the coordinates of the control points ´(x,y,z)´
-            The second dimension of ´P´ spans the u-direction control points ´(0,1,...,n)´
-
-        p : int
-            Degree of the B-Spline basis polynomials
-
-        U : ndarray with shape (r+1=n+p+2,)
-            Knot vector in the u-direction
-            Set the multiplicity of the first and last entries equal to ´p+1´ to obtain a clamped spline
-
         u : scalar or ndarray with shape (N,)
             Parameter used to evaluate the curve
 
@@ -271,8 +259,7 @@ class Curve:
         u = np.asarray(u)
 
         # Set the B-Spline coordinates as the zero-th derivative
-        n_dim, Nu = np.shape(P)[0], np.asarray(u).size
-        bspline_derivatives = np.zeros((up_to_order + 1, n_dim, Nu), dtype=float)
+        bspline_derivatives = np.zeros((up_to_order + 1, np.shape(P)[0], u.size), dtype=float)
 
         # Compute the derivatives of up to the desired order (start at index 1 and end at index `p`)
         # See algorithm A3.2 from the NURBS book
@@ -532,7 +519,7 @@ def basis_polynomials_derivatives(n, p, U, u, derivative_order):
         N = basis_polynomials(n, p, U, u)
         return N
     else:
-        print('Oooopps, something went wrong in compute_basis_polynomials_derivatives()')
+        print('Oooopps, something went wrong in computing the basis_polynomials_derivatives()')
         N = basis_polynomials(n, p, U, u)
         return N
 
@@ -589,9 +576,6 @@ def plot(crv, u=np.linspace(0, 1, 100), fig=None, ax=None, curve=True, knots=Tru
         plot_control_points(crv, fig, ax)
     if frenet_serret:
         plot_frenet_serret(crv, fig, ax, frame_scale=1.5)
-
-    # Set the scaling of the axes
-    rescale_plot(fig, ax)
 
     return fig, ax
 
@@ -666,15 +650,6 @@ def plot_frenet_serret(self, fig, ax, frame_number=2, frame_scale=0.10):
     # points.set_label(' ')
 
     return fig, ax
-
-
-def rescale_plot(fig, ax):
-    """ Adjust the aspect ratio of the figure """
-    # Set the aspect ratio of the data
-    ax.set_aspect(1.0)
-
-    # Adjust pad
-    plt.tight_layout(pad=5.0, w_pad=None, h_pad=None)
 
 
 def plot_curvature(crv, u=np.linspace(0, 1, 101), fig=None, ax=None, color='black', linestyle='-'):
