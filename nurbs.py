@@ -2,80 +2,15 @@ import numba as nb
 import numpy as np
 from scipy import special, integrate
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
 
 
-class Analysis:
-    R = np.array([[0, -1], [1, 0]])
-
-    def __init__(self, current_config=None, reference_config=None, integration_points=None):
-        self.a2 = None
-        self.da1 = None
-        self.a1 = None
-        self.epsilon = None
-        self.sigma = None
-        self.A2 = None
-        self.dA1 = None
-        self.A1 = None
-        self.normA1 = None
-        self.der_ref = None
-        self.cur = current_config
-        self.ref = reference_config
-        self.int_pts = integration_points
-        if self.ref is not None and self.int_pts is not None:
-            self.set_ref_props()
-
-    def set_ref(self, curve):
-        self.ref = curve
-
-    def set_ref_props(self):
-        self.der_ref = self.ref.derivatives(self.int_pts, 2)
-        self.normA1 = np.linalg.norm(self.der_ref[1])
-        self.A1 = self.der_ref[1] / self.normA1
-        self.dA1 = self.der_ref[2] / self.normA1
-        self.A2 = self.R @ self.A1
-
-    def set_int_pts(self, int_pts):
-        self.int_pts = int_pts
-
-    def strain(self, xsi=None):
-
-        pts = xsi if xsi is not None else self.int_pts
-
-        # Calculate derivatives of current configuration
-        der_cur = self.cur.derivatives(pts, 2)
-        self.a1 = der_cur[1] / self.normA1
-        self.da1 = der_cur[2] / self.normA1
-        self.a2 = self.R @ self.a1
-
-        # Calculate strain
-        self.epsilon = np.zeros([2, pts.size], dtype=float)
-        self.epsilon[0] = (np.einsum('ij,ij->j', self.a1, self.a1) - np.einsum('ij,ij->j', self.A1, self.A1)) / 2
-        self.epsilon[1] = np.einsum('ij,ij->j', self.A2, self.dA1) - np.einsum('ij,ij->j', self.a2, self.da1)
-
-        return self.epsilon
-
-    def stress(self, youngs_modulus=1, area=1, second_moment_of_area=1, strain=None):
-        epsilon = self.epsilon if strain is None else strain
-        self.sigma = np.zeros_like(epsilon)
-        self.sigma[0] = youngs_modulus * area * epsilon[0]
-        self.sigma[1] = youngs_modulus * second_moment_of_area * epsilon[1]
-        return self.sigma
-
-    def bmatrix(self):
-        # Size of bmatrix is 2 x 2 per control point per evaluation point
-        # Total size is 2n x 2 x neval_pts
-        n = self.ref.P.shape[1] - 1
-        B = np.zeros([2 * n, 2, self.int_pts.size])
-        norma1 = np.linalg.norm(self.a1, axis=0)
-        for i in range(n):
-            j = 2*i
-            k = j + 2
-            B[j:k, 0, :] += self.a1
-            B[j:k, 1, :] -= self.a2
-            B[j:k, 1, :] -= np.multiply(norma1**-3, np.einsum('ij,jik->jk', self.da1, self.R @ np.einsum('i...,j...', self.a1, self.a1)).T)
-            B[j:k, 1, :] -= np.multiply(norma1**-1, np.einsum('jl,jk->kl', self.da1, self.R))
-
-        return B
+@dataclass
+class Config:
+    at = None
+    dat = None
+    an = None
+    arclength = 0
 
 
 class Curve:
@@ -99,7 +34,7 @@ class Curve:
         All references correspond to The NURBS book unless it is explicitly stated that they come from Farin's book
     """
 
-    def __init__(self, ctrlpts=None, weights=None, degree=None, knots=None):
+    def __init__(self, degree, ctrlpts, knots, weights=None):
         """
         Parameters
         ----------
@@ -393,6 +328,44 @@ class Curve:
         return arclength
 
 
+class Beam(Curve):
+    R = np.array([[0, -1], [1, 0]])
+
+    def __init__(self, degree=None, ctrlpts=None, knots=None, weights=None):
+        super().__init__(degree, ctrlpts, knots, weights)
+        self.ref = Config()
+        self.cur = Config()
+        self.int_pts = np.linspace(0, 1, 11)
+        self.set_config(self.ref)
+        self.strain = np.zeros([2, self.int_pts.size], dtype=float)
+        self.stress = np.zeros_like(self.strain)
+
+    def set_config(self, config):
+        der = self.derivatives(self.int_pts, 2)
+        config.at = der[1]
+        config.dat = der[2]
+        config.an = self.R @ self.ref.at
+
+    def set_int_pts(self, int_pts):
+        self.int_pts = int_pts
+
+    def compute_strain(self):
+        self.set_config(self.cur)
+
+        # Calculate strain
+        self.strain[0] = np.einsum('ij,ij->j', self.cur.at, self.cur.at) / 2
+        self.strain[0] -= np.einsum('ij,ij->j', self.ref.at, self.ref.at) / 2
+        self.strain[1] = np.einsum('ij,ij->j', self.ref.an, self.ref.dat)
+        self.strain[1] -= np.einsum('ij,ij->j', self.cur.an, self.cur.dat)
+
+        return self.strain
+
+    def compute_stress(self, youngs_modulus=1, area=1, second_moment_of_area=1):
+        self.stress[0] = youngs_modulus * area * self.strain[0]
+        self.stress[1] = youngs_modulus * second_moment_of_area * self.strain[1]
+        return self.stress
+
+
 @nb.jit(nopython=True, cache=True)
 def basis_polynomials(n, p, U, u, return_degree=None):
     """ Evaluate the n-th B-Spline basis polynomials of degree ´p´ for the input u-parametrization
@@ -576,6 +549,11 @@ def plot(crv, u=np.linspace(0, 1, 100), fig=None, ax=None, curve=True, knots=Tru
         plot_control_points(crv, fig, ax)
     if frenet_serret:
         plot_frenet_serret(crv, fig, ax, frame_scale=1.5)
+
+    ax.set_aspect(1.0)
+
+    # Adjust pad
+    plt.tight_layout(pad=5.0, w_pad=None, h_pad=None)
 
     return fig, ax
 
