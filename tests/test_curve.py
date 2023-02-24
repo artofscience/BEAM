@@ -18,31 +18,61 @@ def crv(request):
     return circle, request.param
 
 
-def test_curve_degree(crv):
+def test_degree(crv):
     assert crv[0].p == 2
 
 
-def test_curve_ctrlpts(crv):
+def test_ctrlpts(crv):
     assert np.alltrue(
         crv[0].P.T == crv[1] * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
                                         dtype=float))
 
 
-def test_curve_weights(crv):
+def test_weights(crv):
     a = 1 / sqrt(2)
     assert np.alltrue(crv[0].W == np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float))
 
 
-def test_curve_knots(crv):
+def test_knots(crv):
     assert np.alltrue(crv[0].U == np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float))
 
 
-def test_curve_ndim(crv):
+def test_ndim(crv):
     assert crv[0].ndim == 2
 
 
 def test_arclength(crv):
     assert crv[0].arclength() == pytest.approx(2 * pi * crv[1], 1e-2)
+
+
+def test_endpoint_interpolation(crv):
+    assert np.allclose(crv[0].coordinates(0).flatten(), crv[0].P[:, 0])
+    assert np.allclose(crv[0].coordinates(1).flatten(), crv[0].P[:, -1])
+
+
+def test_endpoint_curvature(crv):
+
+    # Get the endpoint curvature numerically
+    cbn = crv[0].curvature(0)
+    cen = crv[0].curvature(1)
+
+    p = crv[0].p
+    W = crv[0].W
+    P = crv[0].P
+    U = crv[0].U
+    n = crv[0].n
+
+    # Get the endpoint curvature analytically
+    cba = (p - 1) / p * (U[p + 1] / U[p + 2]) * (W[2] * W[0] / W[1] ** 2) * \
+                   np.sum(np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]) ** 2) ** (1 / 2) * \
+                   np.sum((P[:, 1] - P[:, 0]) ** 2) ** (-3 / 2)
+
+    cea = (p - 1) / p * (1 - U[n]) / (1 - U[n - 1]) * (W[n] * W[n - 2] / W[n - 1] ** 2) * \
+                   np.sum(np.cross(P[:, n - 1] - P[:, n], P[:, n - 2] - P[:, n]) ** 2) ** (1 / 2) * \
+                   np.sum((P[:, n - 1] - P[:, n]) ** 2) ** (-3 / 2)
+
+    assert cbn == pytest.approx(cba)
+    assert cen == pytest.approx(cea)
 
 
 @pytest.mark.parametrize("u", np.linspace(0, 1, 9).tolist())
@@ -65,3 +95,5 @@ class TestParametrized:
         tangentvec = crv[0].tangent(u)
         angle = u * 2 * pi
         assert np.allclose(tangentvec, np.array([[-sin(angle)], [cos(angle)]]))
+
+
