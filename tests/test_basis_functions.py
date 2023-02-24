@@ -5,7 +5,7 @@ from nurbs import basis_polynomials, basis_polynomials_derivatives
 
 
 @pytest.fixture()
-def crv():
+def problem():
     return Problem(4, 3)
 
 class Problem:
