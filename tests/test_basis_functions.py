@@ -1,19 +1,75 @@
 import numpy as np
 import pytest
+
 from nurbs import basis_polynomials, basis_polynomials_derivatives
 
 
-# @pytest.mark.parametrize("p", [0, 1, 2, 3, 4])
-def test_partition_of_unity():
+@pytest.fixture()
+def problem():
+    return Problem(4, 3)
+
+
+class Problem:
+    u = np.linspace(0, 1, 101)
+
+    def __init__(self, n, p):
+        self.n = n
+        self.p = p
+        self.U = np.concatenate((np.zeros(p), np.linspace(0, 1, n - p + 2), np.ones(p)))
+
+
+def test_partition_of_unity(problem):
     """ Test the partition of unity property of the basis polynomials """
-    n = 4
-    p = 3
     # Define the knot vector (clamped spline)
     # p+1 zeros, n-p equispaced points between 0 and 1, and p+1 ones. In total r+1 points where r=n+p+1
-    U = np.concatenate((np.zeros(p), np.linspace(0, 1, n - p + 2), np.ones(p)))
-    u = np.linspace(0, 1, 101)
-    N_basis = basis_polynomials(n, p, U, u)
+    N_basis = basis_polynomials(problem.n, problem.p, problem.U, problem.u)
     assert np.sum(N_basis, axis=0) == pytest.approx(1, 1e-6)
+
+
+def test_basis_function_zeroth_derivative(problem):
+    """ Test that the zero-th derivative agrees with the function evaluation """
+    # Compute the basis polynomials derivatives analytically
+    N = basis_polynomials(problem.n, problem.p, problem.U, problem.u)
+    dN = basis_polynomials_derivatives(problem.n, problem.p, problem.U, problem.u, derivative_order=0)
+
+    assert np.allclose(dN, N)
+
+
+def test_basis_function_first_derivative_cfd(problem):
+    """ Test the first derivative of the basis polynomials against central finite differences """
+    # Define a new u-parametrization suitable for finite differences
+    h = 1e-5
+    hh = h + h ** 2
+    Nu = 1000
+    u = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
+
+    # Compute the basis polynomials derivatives analytically
+    dN = basis_polynomials_derivatives(problem.n, problem.p, problem.U, u, derivative_order=1)
+
+    # Compute the basis polynomials derivatives by central finite differences
+    a = -1 / 2 * basis_polynomials(problem.n, problem.p, problem.U, u - h)
+    b = +1 / 2 * basis_polynomials(problem.n, problem.p, problem.U, u + h)
+    dN_fd = (a + b) / h
+    assert np.allclose(dN_fd, dN)
+
+
+def test_basis_function_second_derivative_cfd(problem):
+    """ Test the second derivative of the basis polynomials against central finite differences """
+    # Define a new u-parametrization suitable for finite differences
+    h = 1e-4
+    hh = h + h ** 2
+    Nu = 1000
+    u = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
+
+    # Compute the basis polynomials derivatives
+    ddN = basis_polynomials_derivatives(problem.n, problem.p, problem.U, u, derivative_order=2)
+
+    # Check the second derivative against central finite differences
+    a = +1 * basis_polynomials(problem.n, problem.p, problem.U, u - h)
+    b = -2 * basis_polynomials(problem.n, problem.p, problem.U, u)
+    c = +1 * basis_polynomials(problem.n, problem.p, problem.U, u + h)
+    ddN_fd = (a + b + c) / h ** 2
+    assert np.allclose(ddN, ddN_fd)
 
 
 class TestExample2_2:

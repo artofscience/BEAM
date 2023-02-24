@@ -1,7 +1,9 @@
-import pytest
-from nurbs import Curve
 from math import sqrt, pi, sin, cos
+
 import numpy as np
+import pytest
+
+from nurbs import Curve
 
 
 @pytest.fixture(params=[1, 10, 100])
@@ -9,7 +11,8 @@ def crv(request):
     """Create a NURBS circle"""
     a = 1 / sqrt(2)
     knots = np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float)
-    ctrlpts = request.param * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]], dtype=float)
+    ctrlpts = request.param * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
+                                       dtype=float)
     weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
     circle = Curve(2, ctrlpts.T, knots, weights)
     return circle, request.param
@@ -22,7 +25,7 @@ def test_curve_degree(crv):
 def test_curve_ctrlpts(crv):
     assert np.alltrue(
         crv[0].P.T == crv[1] * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
-                            dtype=float))
+                                        dtype=float))
 
 
 def test_curve_weights(crv):
@@ -46,7 +49,7 @@ def test_arclength(crv):
 class TestParametrized:
     def test_curvature(self, crv, u):
         """For a circle the curvature is constant and equal to reciprocal of radius"""
-        assert crv[0].curvature(u) == pytest.approx(1/crv[1])
+        assert crv[0].curvature(u) == pytest.approx(1 / crv[1])
 
     def test_coordinates(self, crv, u):
         evalpt = crv[0].coordinates(u)
