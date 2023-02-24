@@ -1,7 +1,9 @@
 from math import sqrt
-import numpy as np
-from nurbs import Curve, plot
+
 import matplotlib.pyplot as plt
+import numpy as np
+
+from nurbs import Curve, plot
 
 a = 1 / sqrt(2)
 

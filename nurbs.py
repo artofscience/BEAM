@@ -6,22 +6,6 @@ import numpy as np
 from scipy import special, integrate
 
 
-@dataclass
-class Config:
-    at = None
-    nat = None
-    dat = None
-    an = None
-    arclength = 0
-
-
-class Material:
-    def __init__(self, E=1, A=1, I=1):
-        self.E = E
-        self.A = A
-        self.I = I
-
-
 class Curve:
     """ Create a NURBS (Non-Uniform Rational Basis Spline) curve object
         Provide the arrays of control points and weights, degree and knot vector.
@@ -337,6 +321,24 @@ class Curve:
         return arclength
 
 
+@dataclass
+class Config:
+    at = None
+    J = None
+    dat = None
+    an = None
+    basis = None
+    dbasis = None
+    ddbasis = None
+
+
+class Material:
+    def __init__(self, E=1, A=1, I=1):
+        self.E = E
+        self.A = A
+        self.I = I
+
+
 class Beam(Curve):
     R = np.array([[0, -1], [1, 0]])
 
@@ -349,16 +351,32 @@ class Beam(Curve):
         self.strain = np.zeros([2, self.int_pts.size], dtype=float)
         self.stress = np.zeros_like(self.strain)
         self.mat = Material()
+        self.store_basis_functions()
+        pass
 
     def set_config(self, config):
         der = self.derivatives(self.int_pts, 2)
         config.at = der[1]
-        config.nat = np.linalg.norm(config.at, axis=0)
+        config.J = np.linalg.norm(config.at, axis=0)
         config.dat = der[2]
-        config.an = self.R @ self.ref.at
+        config.an = self.R @ config.at
 
-    def set_int_pts(self, int_pts):
-        self.int_pts = int_pts
+    def store_basis_functions(self):
+
+        # Store the B-spline and NURBS basis functions and derivatives (first and second) evaluated at integration points
+        self.basis_bspline = np.zeros([3, self.n + 1, self.int_pts.size], dtype=float)
+        self.basis_bspline[0] = basis_polynomials(self.n, self.p, self.U, self.int_pts)
+        self.basis_bspline[1] = basis_polynomials_derivatives(self.n, self.p, self.U, self.int_pts, 1)
+        self.basis_bspline[2] = basis_polynomials_derivatives(self.n, self.p, self.U, self.int_pts, 2)
+
+        self.basis_nurbs = np.zeros_like(self.basis_bspline)
+        for pt in range(self.int_pts.size):
+            sum = np.dot(self.basis_bspline[0, :, pt], self.W)
+            dsum = np.dot(self.basis_bspline[1, :, pt], self.W)
+            for i in range(self.n + 1):
+                self.basis_nurbs[0, i, pt] += self.basis_bspline[0, i, pt] * self.W[i] / sum
+                self.basis_nurbs[1, i, pt] += self.basis_bspline[1, i, pt] * self.W[i] / sum
+                self.basis_nurbs[1, i, pt] -= dsum / sum ** 2 * self.basis_bspline[0, i, pt] * self.W[i]
 
     def compute_strain(self):
         self.set_config(self.cur)
@@ -376,50 +394,52 @@ class Beam(Curve):
         return self.stress
 
     def compute_stiffness(self):
-        K = self.compute_stiffness_linear()
-        H = self.compute_stiffness_nonlinear()
-        A = K + H
-        return A
-
-    def compute_stiffness_linear(self):
-        B = np.sum(self.compute_bmatrix(), axis=2)
+        B, H = self.assembly()
+        B = np.sum(B, axis=2)
         DB = 1.0 * B
         DB[:, 0] *= self.mat.E * self.mat.A
         DB[:, 1] *= self.mat.E * self.mat.A
         K = DB @ B.T
-        return K
 
-    def compute_stiffness_nonlinear(self):
+    def compute_derivatives(self):
+        dRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
+        ddRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
+        for pt in range(self.int_pts.size):
+            for i in range(0, self.n):
+                dRs[i, pt] = self.ref.J ** -1 * self.ref.dbasis[i, pt]
+                ddRs[i, pt] = self.ref.ddbasis[i, pt] / self.ref.J ** 2 - self.ref.dbasis[
+                    i, pt] / self.ref.J ** -4 * np.dot(self.ref.at[pt], self.ref.dat[pt])
+        return dRs, ddRs
+
+    def assembly(self):
         n = 2 * (self.n + 1)
+        B = np.zeros([n, 2], dtype=float)
         H = np.zeros([n, n], dtype=float)
         for pt in range(self.int_pts.size):
             dN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=1)
             ddN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=2)
             at = self.cur.at[:, pt]
             dat = self.cur.dat[:, pt]
-            nat = self.cur.nat[pt]
+            nat = self.cur.J[pt]
             A = np.outer(at, at)
             for i in range(self.n + 1):
+                v = 2 * i
+                w = v + 2
+                B[v:w, 0] += dN[i] * at
+                B[v:w, 1] -= ddN[i] * self.cur.an[:, pt]
+                B[v:w, 1] -= dN[i] * nat ** -1 * dat @ self.R  # dat transpose?
+                B[v:w, 1] += dN[i] * nat ** -3 * dat @ self.R @ np.outer(at, at)  # dat transpose?
                 for j in range(self.n + 1):
-                    H[2*i:2*i+2, 2*j:2*j+2] += ddN[i] * dN[j] * nat**-1 * (nat**-2 * self.R @ A - self.R)
-                    H[2 * i:2 * i + 2, 2 * j:2 * j + 2] += ddN[j] * dN[i] * nat**-1 * self.R - nat**-3 * A @ self.R
-                    H[2 * i:2 * i + 2, 2 * j:2 * j + 2] += dN[i] * dN[j] * nat**-3 * (np.dot(dat, self.R @ at) * np.identity(2) + np.outer(at, dat) @ self.R + 3 * nat**-2 * np.outer(at, dat) @ self.R @ A - self.R @ np.outer(dat, at))
-        return H
-
-    def compute_bmatrix(self):
-        # Size of bmatrix is 2 x 2 per control point per evaluation point
-        # Total size is 2n x 2 x neval_pts
-        n = self.n
-        B = np.zeros([2 * n, 2, self.int_pts.size])
-        norma1 = np.linalg.norm(self.cur.at, axis=0)
-        for i in range(n):
-            j = 2*i
-            k = j + 2
-            B[j:k, 0, :] += self.cur.at
-            B[j:k, 1, :] -= self.cur.an
-            B[j:k, 1, :] -= np.multiply(norma1**-3, np.einsum('ij,jik->jk', self.cur.dat, self.R @ np.einsum('i...,j...', self.cur.at, self.cur.at)).T)
-            B[j:k, 1, :] -= np.multiply(norma1**-1, np.einsum('jl,jk->kl', self.cur.dat, self.R))
-        return B
+                    x = 2 * j
+                    y = x + 2
+                    H[v:w, x:y] += ddN[i] * dN[j] * nat ** -1 * (nat ** -2 * self.R @ A - self.R)
+                    H[v:w, x:y] += ddN[j] * dN[i] * nat ** -1 * self.R - nat ** -3 * A @ self.R
+                    z = dN[i] * dN[j] * nat ** -3
+                    H[v:w, x:y] += z * np.dot(dat, self.R @ at) * np.identity(2)
+                    H[v:w, x:y] += z * np.outer(at, dat) @ self.R
+                    H[v:w, x:y] += z * 3 * nat ** -2 * np.outer(at, dat) @ self.R @ A
+                    H[v:w, x:y] += z * self.R @ np.outer(dat, at)
+        return B, H
 
 
 @nb.jit(nopython=True, cache=True)
