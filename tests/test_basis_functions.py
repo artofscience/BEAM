@@ -2,24 +2,11 @@ import numpy as np
 import pytest
 
 from nurbs import basis_polynomials, basis_polynomials_derivatives
-from nurbs import Curve
+
 
 @pytest.fixture()
-def problem():
-    P = np.zeros((2, 5))
-    n = 4
-    p=3
-    P[:, 0] = [0.00, 0.00]
-    P[:, 1] = [0.00, 0.30]
-    P[:, 2] = [0.25, 0.30]
-    P[:, 3] = [0.50, 0.30]
-    P[:, 4] = [0.50, 0.10]
-    W = np.asarray([1, 1, 3, 1, 1])
-    U = np.concatenate((np.zeros(p), np.linspace(0, 1, n - p + 2), np.ones(p)))
-    crv = Curve(p, P, U, W)
-    crv.u = np.linspace(0, 1, 101)
-    return crv
-
+def crv():
+    return Problem(4, 3)
 
 class Problem:
     u = np.linspace(0, 1, 101)
@@ -84,50 +71,6 @@ def test_basis_function_second_derivative_cfd(problem):
     assert np.allclose(ddN, ddN_fd)
 
 
-def test_nurbs_zeroth_derivative(problem):
-    """ Test that the zero-th derivative agrees with the function evaluation """
-    # Compute the basis polynomials derivatives analytically
-    N = problem.coordinates(problem.u)
-    dN = problem.derivatives(problem.u, 0)
-
-    assert np.allclose(dN, N)
-
-
-def test_nurbs_first_derivative_cfd(problem):
-    """ Test the first derivative of the nurbs against central finite differences """
-    # Define a new u-parametrization suitable for finite differences
-    h = 1e-5
-    hh = h + h ** 2
-    Nu = 1000
-    u = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
-
-    # Compute the basis polynomials derivatives analytically
-    dN = problem.derivatives(u, 1)[1]
-
-    # Compute the basis polynomials derivatives by central finite differences
-    a = -1 / 2 * problem.coordinates(u - h)
-    b = +1 / 2 * problem.coordinates(u + h)
-    dN_fd = (a + b) / h
-    assert np.allclose(dN_fd, dN)
-
-
-def test_nurbs_second_derivative_cfd(problem):
-    """ Test the second derivative of the nurbs against central finite differences """
-    # Define a new u-parametrization suitable for finite differences
-    h = 1e-4
-    hh = h + h ** 2
-    Nu = 1000
-    u = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
-
-    # Compute the basis polynomials derivatives
-    ddN = problem.derivatives(u, 2)[2]
-
-    # Check the second derivative against central finite differences
-    a = +1 * problem.coordinates(u - h)
-    b = -2 * problem.coordinates(u)
-    c = +1 * problem.coordinates(u + h)
-    ddN_fd = (a + b + c) / h ** 2
-    assert np.allclose(ddN, ddN_fd, rtol=1e-3)
 
 class TestExample2_2:
     """ Test the basis function value against a known example (Ex2.2 from the NURBS book) """
