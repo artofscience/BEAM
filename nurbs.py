@@ -133,6 +133,8 @@ class Curve:
 
         """
 
+        u = np.asarray(u, dtype=float)
+
         # Map the control points to homogeneous space | P_w = (x*w,y*w,w)
         P_w = np.concatenate((self.P * self.W[np.newaxis, :], self.W[np.newaxis, :]), axis=0)
 
@@ -207,6 +209,28 @@ class Curve:
 
         return bspline_derivatives
 
+    def store_basis_functions(self, u):
+
+        u = np.asarray(u, dtype=float)
+        # Store the B-spline and NURBS basis functions and derivatives (first and second) evaluated at integration points
+        self.basis_bspline = np.zeros([3, self.n + 1, u.size], dtype=float)
+        self.basis_bspline[0] = basis_polynomials(self.n, self.p, self.U, u)
+        self.basis_bspline[1] = basis_polynomials_derivatives(self.n, self.p, self.U, u, 1)
+        self.basis_bspline[2] = basis_polynomials_derivatives(self.n, self.p, self.U, u, 2)
+
+        self.basis_nurbs = np.zeros_like(self.basis_bspline)
+        for pt in range(u.size):
+            sum = np.dot(self.basis_bspline[0, :, pt], self.W)
+            dsum = np.dot(self.basis_bspline[1, :, pt], self.W)
+            ddsum = np.dot(self.basis_bspline[2, :, pt], self.W)
+            for i in range(self.n + 1):
+                a = self.basis_bspline[0, i, pt] * self.W[i]
+                b = self.basis_bspline[1, i, pt] * self.W[i]
+                c = self.basis_bspline[2, i, pt] * self.W[i]
+                self.basis_nurbs[0, i, pt] = a / sum
+                self.basis_nurbs[1, i, pt] = (b / sum) - (a * dsum / sum ** 2)
+                self.basis_nurbs[2, i, pt] = (c / sum) + (2 * a * dsum ** 2 / sum ** 3) - (2 * b * dsum / sum ** 2) - (a * ddsum / sum ** 2)
+
     def tangent(self, u):
 
         """ Evaluate the unitary tangent vector to the curve for the input u-parametrization
@@ -226,6 +250,7 @@ class Curve:
             The second dimension of ´tangent´ spans the ´u´ parametrization sample points
 
         """
+        u = np.asarray(u, dtype=float)
 
         # Compute the curve derivatives
         dC, = self.derivatives(u, up_to_order=1)[[1], ...]
@@ -252,7 +277,7 @@ class Curve:
         """
 
         # Compute the curve derivatives
-        u = np.asarray(u)
+        u = np.asarray(u, dtype=float)
         dC = self.derivatives(u, up_to_order=1)[1, ...]
 
         # Compute the normal vector
@@ -278,7 +303,7 @@ class Curve:
         """
 
         # Compute the curve derivatives
-        u = np.asarray(u)
+        u = np.asarray(u, dtype=float)
         dC, ddC = self.derivatives(u, up_to_order=2)[[1, 2], ...]
 
         # Compute the curvature
@@ -361,22 +386,7 @@ class Beam(Curve):
         config.dat = der[2]
         config.an = self.R @ config.at
 
-    def store_basis_functions(self):
 
-        # Store the B-spline and NURBS basis functions and derivatives (first and second) evaluated at integration points
-        self.basis_bspline = np.zeros([3, self.n + 1, self.int_pts.size], dtype=float)
-        self.basis_bspline[0] = basis_polynomials(self.n, self.p, self.U, self.int_pts)
-        self.basis_bspline[1] = basis_polynomials_derivatives(self.n, self.p, self.U, self.int_pts, 1)
-        self.basis_bspline[2] = basis_polynomials_derivatives(self.n, self.p, self.U, self.int_pts, 2)
-
-        self.basis_nurbs = np.zeros_like(self.basis_bspline)
-        for pt in range(self.int_pts.size):
-            sum = np.dot(self.basis_bspline[0, :, pt], self.W)
-            dsum = np.dot(self.basis_bspline[1, :, pt], self.W)
-            for i in range(self.n + 1):
-                self.basis_nurbs[0, i, pt] += self.basis_bspline[0, i, pt] * self.W[i] / sum
-                self.basis_nurbs[1, i, pt] += self.basis_bspline[1, i, pt] * self.W[i] / sum
-                self.basis_nurbs[1, i, pt] -= dsum / sum ** 2 * self.basis_bspline[0, i, pt] * self.W[i]
 
     def compute_strain(self):
         self.set_config(self.cur)

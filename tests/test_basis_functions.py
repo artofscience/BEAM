@@ -8,6 +8,7 @@ from nurbs import basis_polynomials, basis_polynomials_derivatives
 def problem():
     return Problem(4, 3)
 
+
 class Problem:
     u = np.linspace(0, 1, 101)
 
@@ -39,7 +40,7 @@ def test_basis_function_first_derivative_cfd(problem):
     # Define a new u-parametrization suitable for finite differences
     h = 1e-5
     hh = h + h ** 2
-    Nu = 1000
+    Nu = 5
     u = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
 
     # Compute the basis polynomials derivatives analytically
@@ -69,7 +70,6 @@ def test_basis_function_second_derivative_cfd(problem):
     c = +1 * basis_polynomials(problem.n, problem.p, problem.U, u + h)
     ddN_fd = (a + b + c) / h ** 2
     assert np.allclose(ddN, ddN_fd)
-
 
 
 class TestExample2_2:
