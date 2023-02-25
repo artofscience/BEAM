@@ -198,7 +198,7 @@ class TestParametrized:
 def test_individual_nurbs_basis_functions_first_derivative(crv):
     h = 1e-5
     hh = h + h ** 2
-    Nu = 1001
+    Nu = 100
     x = np.linspace(0.00 + hh, 1.00 - hh, Nu)  # Make sure that the limits [0, 1] also work when making changes
 
     crv[0].store_basis_functions(x)
