@@ -350,11 +350,8 @@ class Curve:
 class Config:
     at = None
     J = None
-    dat = None
     an = None
-    basis = None
-    dbasis = None
-    ddbasis = None
+    dat = None
 
 
 class Material:
@@ -376,26 +373,17 @@ class Beam(Curve):
         self.strain = np.zeros([2, self.int_pts.size], dtype=float)
         self.stress = np.zeros_like(self.strain)
         self.mat = Material()
-        self.store_basis_functions()
-        pass
 
     def set_config(self, config):
         der = self.derivatives(self.int_pts, 2)
         config.at = der[1]
-        config.J = np.linalg.norm(config.at, axis=0)
         config.dat = der[2]
+        config.J = np.linalg.norm(config.at, axis=0)
         config.an = self.R @ config.at
 
-
-
     def compute_strain(self):
-        self.set_config(self.cur)
-
-        # Calculate strain
-        self.strain[0] = np.einsum('ij,ij->j', self.cur.at, self.cur.at) / 2
-        self.strain[0] -= np.einsum('ij,ij->j', self.ref.at, self.ref.at) / 2
-        self.strain[1] = np.einsum('ij,ij->j', self.ref.an, self.ref.dat)
-        self.strain[1] -= np.einsum('ij,ij->j', self.cur.an, self.cur.dat)
+        self.strain[0] = 0.5 * (np.einsum('ij,ij->j', self.cur.at, self.cur.at) - np.einsum('ij,ij->j', self.ref.at, self.ref.at))
+        self.strain[1] = 0.5 * (np.einsum('ij,ij->j', self.ref.an, self.ref.dat) - np.einsum('ij,ij->j', self.ref.an, self.ref.dat))
         return self.strain
 
     def compute_stress(self):
@@ -412,22 +400,18 @@ class Beam(Curve):
         K = DB @ B.T
 
     def compute_derivatives(self):
-        dRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
-        ddRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
+        self.dRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
+        self.ddRs = np.zeros([self.n + 1, self.int_pts.size], dtype=float)
         for pt in range(self.int_pts.size):
             for i in range(0, self.n):
-                dRs[i, pt] = self.ref.J ** -1 * self.ref.dbasis[i, pt]
-                ddRs[i, pt] = self.ref.ddbasis[i, pt] / self.ref.J ** 2 - self.ref.dbasis[
-                    i, pt] / self.ref.J ** -4 * np.dot(self.ref.at[pt], self.ref.dat[pt])
-        return dRs, ddRs
+                self.dRs[i, pt] = self.ref.J[pt] ** -1 * self.basis_nurbs[1, i, pt]
+                self.ddRs[i, pt] = self.basis_nurbs[2, i, pt] / self.ref.J[pt] ** 2 - self.basis_nurbs[1, i, pt] / self.ref.J[pt] ** 4 * np.dot(self.ref.at[:,pt], self.ref.dat[:,pt])
 
     def assembly(self):
         n = 2 * (self.n + 1)
-        B = np.zeros([n, 2], dtype=float)
-        H = np.zeros([n, n], dtype=float)
+        B = np.zeros([n, 2, self.int_pts.size], dtype=float)
+        H = np.zeros([n, n, self.int_pts.size], dtype=float)
         for pt in range(self.int_pts.size):
-            dN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=1)
-            ddN = basis_polynomials_derivatives(self.n, self.p, self.U, pt, derivative_order=2)
             at = self.cur.at[:, pt]
             dat = self.cur.dat[:, pt]
             nat = self.cur.J[pt]
@@ -435,20 +419,22 @@ class Beam(Curve):
             for i in range(self.n + 1):
                 v = 2 * i
                 w = v + 2
-                B[v:w, 0] += dN[i] * at
-                B[v:w, 1] -= ddN[i] * self.cur.an[:, pt]
-                B[v:w, 1] -= dN[i] * nat ** -1 * dat @ self.R  # dat transpose?
-                B[v:w, 1] += dN[i] * nat ** -3 * dat @ self.R @ np.outer(at, at)  # dat transpose?
+                B[v:w, 0, pt] += self.dRs[i, pt] * at
+                B[v:w, 1, pt] -= self.ddRs[i, pt] * self.cur.an[:, pt]
+                B[v:w, 1, pt] -= self.dRs[i, pt] * nat ** -1 * dat @ self.R  # dat transpose?
+                B[v:w, 1, pt] += self.dRs[i, pt] * nat ** -3 * dat @ self.R @ np.outer(at, at)  # dat transpose?
                 for j in range(self.n + 1):
                     x = 2 * j
                     y = x + 2
-                    H[v:w, x:y] += ddN[i] * dN[j] * nat ** -1 * (nat ** -2 * self.R @ A - self.R)
-                    H[v:w, x:y] += ddN[j] * dN[i] * nat ** -1 * self.R - nat ** -3 * A @ self.R
-                    z = dN[i] * dN[j] * nat ** -3
-                    H[v:w, x:y] += z * np.dot(dat, self.R @ at) * np.identity(2)
-                    H[v:w, x:y] += z * np.outer(at, dat) @ self.R
-                    H[v:w, x:y] += z * 3 * nat ** -2 * np.outer(at, dat) @ self.R @ A
-                    H[v:w, x:y] += z * self.R @ np.outer(dat, at)
+                    H[v:w, x:y, pt] += self.ddRs[i, pt] * self.dRs[j, pt] * nat ** -1 * (nat ** -2 * self.R @ A - self.R)
+                    H[v:w, x:y, pt] += self.ddRs[j, pt] * self.dRs[i, pt] * nat ** -1 * self.R - nat ** -3 * A @ self.R
+                    z = self.dRs[i, pt] * self.dRs[j, pt] * nat ** -3
+                    H[v:w, x:y, pt] += z * np.dot(dat, self.R @ at) * np.identity(2)
+                    H[v:w, x:y, pt] += z * np.outer(at, dat) @ self.R
+                    H[v:w, x:y, pt] += z * 3 * nat ** -2 * np.outer(at, dat) @ self.R @ A
+                    H[v:w, x:y, pt] += z * self.R @ np.outer(dat, at)
+        self.B = B
+        self.H = H
         return B, H
 
 
