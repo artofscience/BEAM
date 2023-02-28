@@ -2,6 +2,12 @@ from dataclasses import dataclass
 
 import numpy as np
 from nurbs import Curve
+from scipy import integrate
+
+from scipy import sparse
+import warnings
+
+from bspline_basis_functions import basis_polynomials, basis_polynomials_derivatives
 
 @dataclass
 class Config:
@@ -18,7 +24,9 @@ class Beam(Curve):
         super().__init__(degree, ctrlpts, knots, weights)
         self.ref = Config()
         self.cur = Config()
-        self.int_pts = np.linspace(0, 1, 11)
+        self.quad = Quadrature(self.nks)
+        self.int_pts = self.quad.pts
+        self.int_w = self.quad.w
         self.set_config(self.ref)
         self.store_basis_functions(self.int_pts)
         self.strain = np.zeros([2, self.int_pts.size], dtype=float)
@@ -62,6 +70,14 @@ class Beam(Curve):
                 self.ddRs[i, pt] = self.basis_nurbs[2, i, pt] / self.ref.J[pt] ** 2 - self.basis_nurbs[1, i, pt] / \
                                    self.ref.J[pt] ** 4 * np.dot(self.ref.at[:, pt], self.ref.dat[:, pt])
 
+    def bmatrix_axial(self, u):
+        n = 2 * (self.n + 1)
+        B = np.zeros(2 * (self.n + 1), dtype=float)
+        for i in range(self.n + 1):
+            B[2 * i:2 * i + 2, 0] += self.basis_nurbs[1, i]
+        return B
+
+
     def assembly(self):
         n = 2 * (self.n + 1)
         B = np.zeros([n, 2, self.int_pts.size], dtype=float)
@@ -93,3 +109,63 @@ class Beam(Curve):
         self.H = H
         return B, H
 
+
+    def arclength(self, u1=0.00, u2=1.00):
+
+        """ Compute the arc length of a parametric curve in the interval [u1,u2] using numerical quadrature
+
+        The definition of the arc length is given by equation 10.3 (Farin's textbook)
+
+        Parameters
+        ----------
+        u1 : scalar
+            Lower limit of integration for the arc length computation
+
+        u2 : scalar
+            Upper limit of integration for the arc length computation
+
+        Returns
+        -------
+        L : scalar
+            Arc length of NURBS curve in the interval [u1, u2]
+
+        """
+
+        # Compute the arc length of C(t) in the interval [u1, u2] by numerical integration
+        arclength = integrate.quadrature(self.arclength_differential, u1, u2)[0]
+
+        return arclength
+
+    # Compute the arc length differential analytically
+    def arclength_differential(self, u):
+        dCdu = self.derivatives(u, up_to_order=1)[1, ...]
+        dLdu = np.sqrt(np.sum(dCdu ** 2, axis=0))  # dL/du = [(dx_0/du)^2 + ... + (dx_n/du)^2]^(1/2)
+        return dLdu
+
+
+class Quadrature:
+    def __init__(self, n):
+        self.pts = 0
+        self.w = 0
+        self.n = n
+
+        if self.n == 2 or self.n == 1:
+            self.pts = [0.084001595740497, 0.353667436436311, 0.646332563563689, 0.915998404259503]
+            self.w = [0.204166185672591, 0.295833814327409, 0.295833814327409, 0.204166185672591]
+        elif self.n == 3:
+            self.pts = [0.055307959538964, 0.232008127012761, 0.410698113579587, 0.589301886420413, 0.767991872987239,
+                        0.944692040461036]
+            self.w = [0.134383670129084, 0.190719210529352, 0.174897119341564, 0.174897119341564, 0.190719210529352,
+                      0.134383670129084]
+        elif self.n == 4:
+            self.pts = [0.042302270496914, 0.178540270746368, 0.335067537628328, 0.500000000000000, 0.664932462371672,
+                        0.821459729253632, 0.957697729503086]
+            self.w = [0.102836135188702, 0.151209936088574, 0.165363166232141, 0.161181524981166, 0.165363166232141,
+                      0.151209936088574, 0.102836135188702]
+        elif self.n == 5:
+            self.pts = [0.033825647049693, 0.142739413107187, 0.267383546533900, 0.393434348254817, 0.500000000000000,
+                        0.606565651745183, 0.732616453466100, 0.857260586892813, 0.966174352950307]
+            self.w = [0.082228488484279, 0.120781740225645, 0.131305988133937, 0.112350449822805, 0.106666666666667,
+                      0.112350449822805, 0.131305988133937, 0.120781740225645, 0.082228488484279]
+        self.pts = np.asarray(self.pts)
+        self.w = np.asarray(self.w)

@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import special, integrate
+from scipy import special
 
 from bspline_basis_functions import basis_polynomials, basis_polynomials_derivatives
 
@@ -52,6 +52,7 @@ class Curve:
         self.U = knots
         # Highest index of the control points (counting from zero)
         self.n = np.shape(self.P)[1] - 1
+        self.nks = np.unique(knots).size - 1
 
         if self.P.ndim > 2:
             raise Exception('P must be an array of shape (ndim, n+1)')
@@ -311,37 +312,5 @@ class Curve:
         numerator = np.sum(np.cross(ddC, dC, axisa=0, axisb=0, axisc=0) ** 2, axis=0) ** (1 / 2)
         denominator = (np.sum(dC ** 2, axis=0)) ** (3 / 2)
         return numerator / denominator
-
-    def arclength(self, u1=0.00, u2=1.00):
-
-        """ Compute the arc length of a parametric curve in the interval [u1,u2] using numerical quadrature
-
-        The definition of the arc length is given by equation 10.3 (Farin's textbook)
-
-        Parameters
-        ----------
-        u1 : scalar
-            Lower limit of integration for the arc length computation
-
-        u2 : scalar
-            Upper limit of integration for the arc length computation
-
-        Returns
-        -------
-        L : scalar
-            Arc length of NURBS curve in the interval [u1, u2]
-
-        """
-
-        # Compute the arc length differential analytically
-        def get_arclength_differential(u):
-            dCdu = self.derivatives(u, up_to_order=1)[1, ...]
-            dLdu = np.sqrt(np.sum(dCdu ** 2, axis=0))  # dL/du = [(dx_0/du)^2 + ... + (dx_n/du)^2]^(1/2)
-            return dLdu
-
-        # Compute the arc length of C(t) in the interval [u1, u2] by numerical integration
-        arclength = integrate.quadrature(get_arclength_differential, u1, u2)[0]
-
-        return arclength
 
 
