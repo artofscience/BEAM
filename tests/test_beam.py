@@ -1,14 +1,26 @@
+from math import cos, sin, pi
+
 import numpy as np
 import pytest
-from math import cos, sin, pi
-from nurbs import Beam
+
+from analysis import Beam
 
 
 @pytest.fixture()
 def beam():
-    ctrlpts = np.array([[0, 0], [1/3, 0], [2/3, 0], [1, 0]], dtype=float)
+    ctrlpts = np.array([[0, 0], [1 / 3, 0], [2 / 3, 0], [1, 0]], dtype=float)
     knots = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=float)
     return Beam(3, ctrlpts.T, knots)
+
+@pytest.fixture(params=[1, 0.1, 10])
+def beaml(request):
+    ctrlpts = np.array([[0, 0], [request.param / 3, 0], [2* request.param / 3, 0], [request.param, 0]], dtype=float)
+    knots = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=float)
+    return Beam(3, ctrlpts.T, knots), request.param
+
+def test_beam_axis_parametrization(beaml):
+    beaml[0].compute_derivatives()
+    assert np.allclose(beaml[0].ref.J, beaml[1])
 
 
 def test_rigid_body_motion(beam):
@@ -18,12 +30,13 @@ def test_rigid_body_motion(beam):
     assert np.allclose(strain, 0.0)
 
 
-@pytest.mark.parametrize("theta", [pi/2, pi, 3/2*pi, 2*pi])
+@pytest.mark.parametrize("theta", [pi / 2, pi, 3 / 2 * pi, 2 * pi])
 def test_rigid_body_rotation(beam, theta):
     beam.P = np.array([[cos(theta), -sin(theta)], [sin(theta), cos(theta)]], dtype=float) @ beam.P
     beam.set_config(beam.cur)
     strain = beam.compute_strain()
     assert np.allclose(strain, 0.0)
+
 
 @pytest.mark.parametrize("dl", [0.001, 0.01, 0.1, 1])
 def test_axial_strain(beam, dl):
@@ -32,3 +45,7 @@ def test_axial_strain(beam, dl):
     strain = beam.compute_strain()
     gl = dl + 0.5 * dl ** 2
     assert np.allclose(strain[0], gl)
+    assert np.allclose(strain[1], 0.0)
+
+
+
