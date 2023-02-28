@@ -12,6 +12,15 @@ def beam():
     knots = np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=float)
     return Beam(3, ctrlpts.T, knots)
 
+def test_axial_displacement(beam):
+    b = beam.bmatrix_axial()
+    K = np.outer(b, b)
+    u = np.zeros(4, dtype=float)
+    f = np.zeros(3, dtype=float)
+    f[-1] = 1
+    # u[1::] = np.linalg.solve(K[1::, 1::], f)
+    # singular matrix!
+
 @pytest.fixture(params=[1, 0.1, 10])
 def beaml(request):
     ctrlpts = np.array([[0, 0], [request.param / 3, 0], [2* request.param / 3, 0], [request.param, 0]], dtype=float)
@@ -56,6 +65,7 @@ def circle():
 
     return Beam(2, ctrlpts, knots)
 
+
 def test_bending_strain(circle):
     # fig, ax = plot(circle)
     circle.P = 1 / (2 * pi) * np.array([[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1]], dtype=float).T
@@ -68,6 +78,7 @@ def test_bending_strain(circle):
     strain = circle.compute_strain()
     M = 2 * pi
     pass
+
 
 def test_b_matrix(beam):
     beam.set_config(beam.cur)

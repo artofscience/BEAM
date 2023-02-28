@@ -25,7 +25,7 @@ class Curve:
         All references correspond to The NURBS book unless it is explicitly stated that they come from Farin's book
     """
 
-    def __init__(self, degree, ctrlpts, knots, weights=None):
+    def __init__(self, degree, ctrlpts, knots=None, weights=None):
         """
         Parameters
         ----------
@@ -49,21 +49,39 @@ class Curve:
         self.P = ctrlpts
         self.W = weights if weights is not None else np.ones(self.P.shape[1])
         self.p = degree
-        self.U = knots
         # Highest index of the control points (counting from zero)
-        self.n = np.shape(self.P)[1] - 1
-        self.nks = np.unique(knots).size - 1
+        self.n = np.shape(self.P)[1] - 1  # nctrlpts = n + 1
+        self.U = knots if knots is not None else self.generate_knots()
+        self.m = self.U.size - 1
+        self.U_unique, self.multiplicity = np.unique(self.U, return_counts=True)
+        self.nks = self.U_unique.size - 1  # number of knot spans
 
-        if self.P.ndim > 2:
-            raise Exception('P must be an array of shape (ndim, n+1)')
         if self.W.ndim > 1:
             raise Exception('W must be an array of shape (n+1,)')
+        if np.any(self.W) < 0:
+            raise Exception('Weights must be non-negative')
+        if self.W.size is not self.n + 1:
+            raise Exception('Number of weights must equal number of control points')
         if not np.isscalar(self.p):
             raise Exception('p must be an scalar')
         if self.U.ndim > 1:
             raise Exception('U must be an array of shape (r+1=n+p+2,)')
         if self.p > self.n:
             raise Exception('p must be equal or lower than the number of basis polynomials')
+        if self.m is not self.n + self.p + 1:
+            raise Exception('m != n + p + 1')
+
+    def generate_knots(self):
+        """Generates an equally-spaced knot vector.
+        m = n + 1 + p
+        Assumed double clamped.
+        """
+
+        knots = [0.0 for _ in range(self.p)]
+        knots += np.linspace(0, 1, self.n + 1 - (self.p + 1) + 2).tolist()
+        knots += [1.0 for _ in range(0, self.p)]
+
+        return np.asarray(knots, dtype=float)
 
     def value(self, u):
 

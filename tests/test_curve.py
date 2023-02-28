@@ -18,6 +18,13 @@ def crv(request):
     circle = Curve(2, ctrlpts.T, knots, weights)
     return circle, request.param
 
+def test_generate_knot():
+    ctrlpts = np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
+                                       dtype=float)
+    a = 1 / sqrt(2)
+    weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
+    circle = Curve(2, ctrlpts.T, weights=weights)
+    assert np.allclose(circle.U.size, np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float).size)
 
 def test_degree(crv):
     assert crv[0].p == 2

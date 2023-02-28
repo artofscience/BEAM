@@ -70,11 +70,11 @@ class Beam(Curve):
                 self.ddRs[i, pt] = self.basis_nurbs[2, i, pt] / self.ref.J[pt] ** 2 - self.basis_nurbs[1, i, pt] / \
                                    self.ref.J[pt] ** 4 * np.dot(self.ref.at[:, pt], self.ref.dat[:, pt])
 
-    def bmatrix_axial(self, u):
-        n = 2 * (self.n + 1)
-        B = np.zeros(2 * (self.n + 1), dtype=float)
-        for i in range(self.n + 1):
-            B[2 * i:2 * i + 2, 0] += self.basis_nurbs[1, i]
+    def bmatrix_axial(self):
+        B = np.zeros(self.n + 1, dtype=float)
+        for pt in range(self.int_pts.size):
+            for i in range(self.n + 1):
+                B[i] += self.basis_nurbs[1, i, pt]
         return B
 
 
