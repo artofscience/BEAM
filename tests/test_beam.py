@@ -1,4 +1,4 @@
-from math import cos, sin, pi
+from math import cos, sin, pi, sqrt
 
 import numpy as np
 import pytest
@@ -48,4 +48,32 @@ def test_axial_strain(beam, dl):
     assert np.allclose(strain[1], 0.0)
 
 
+@pytest.fixture()
+def circle():
+    knots = np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float)
+    ctrlpts = np.zeros([2, 9], dtype=float)
+    ctrlpts[0] = np.linspace(0, 1, 9)
+
+    return Beam(2, ctrlpts, knots)
+
+def test_bending_strain(circle):
+    # fig, ax = plot(circle)
+    circle.P = 1 / (2 * pi) * np.array([[0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1]], dtype=float).T
+    circle.P[1] += 1 / (2 * pi)
+    # plot(circle, fig=fig, ax=ax)
+    # plt.show()
+    a = 1 / sqrt(2)
+    weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
+    circle.set_config(circle.cur)
+    strain = circle.compute_strain()
+    M = 2 * pi
+    pass
+
+def test_b_matrix(beam):
+    beam.set_config(beam.cur)
+    beam.compute_derivatives()
+    b, h = beam.assembly()
+
+
+    pass
 

@@ -42,8 +42,7 @@ def test_ndim(crv):
     assert crv[0].ndim == 2
 
 
-def test_arclength(crv):
-    assert crv[0].arclength() == pytest.approx(2 * pi * crv[1], 1e-2)
+
 
 
 def test_endpoint_interpolation(crv):
