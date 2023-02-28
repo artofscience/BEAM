@@ -52,7 +52,7 @@ def test_arclength_circle_quadrature(circle):
 def test_arclength_line_hpr(line):
     L = 0
     for idx, i in enumerate(line[0].int_pts):
-        L += line[0].int_w[idx] * line[0].get_arclength_differential(i)
+        L += line[0].int_w[idx] * line[0].arclength_differential(i)
     assert L == pytest.approx(line[1])
 
 
@@ -60,6 +60,6 @@ def test_arclength_circle_hpr(circle):
     for idx, i in enumerate(circle[0]):
         L = 0
         for idx, j in enumerate(i.int_pts):
-            L += i.int_w[idx] * i.get_arclength_differential(j)
+            L += i.int_w[idx] * i.arclength_differential(j)
         assert L == pytest.approx(circle[1], 1e-2)
 
