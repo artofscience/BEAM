@@ -3,7 +3,8 @@ from math import sqrt, pi, sin, cos
 import numpy as np
 import pytest
 
-from nurbs import Curve, basis_polynomials
+from nurbs import Curve
+from bspline_basis_functions import basis_polynomials
 
 
 @pytest.fixture(params=[1, 10, 100])
@@ -46,15 +47,15 @@ def test_arclength(crv):
 
 
 def test_endpoint_interpolation(crv):
-    assert np.allclose(crv[0].coordinates(0).flatten(), crv[0].P[:, 0])
-    assert np.allclose(crv[0].coordinates(1).flatten(), crv[0].P[:, -1])
+    assert np.allclose(crv[0].value(0).flatten(), crv[0].P[:, 0])
+    assert np.allclose(crv[0].value(1).flatten(), crv[0].P[:, -1])
 
 
 def test_nurbs_zeroth_derivative(crv):
     """ Test that the zero-th derivative agrees with the function evaluation """
     # Compute the basis polynomials derivatives analytically
     u = np.linspace(0, 1, 1000)
-    N = crv[0].coordinates(u)
+    N = crv[0].value(u)
     dN = crv[0].derivatives(u, 0)
 
     assert np.allclose(dN, N)
@@ -72,8 +73,8 @@ def test_nurbs_first_derivative_cfd(crv):
     dN = crv[0].derivatives(u, 1)[1]
 
     # Compute the basis polynomials derivatives by central finite differences
-    a = -1 / 2 * crv[0].coordinates(u - h)
-    b = +1 / 2 * crv[0].coordinates(u + h)
+    a = -1 / 2 * crv[0].value(u - h)
+    b = +1 / 2 * crv[0].value(u + h)
     dN_fd = (a + b) / h
     assert np.allclose(dN_fd, dN, rtol=1e-3)
 
@@ -90,9 +91,9 @@ def test_nurbs_second_derivative_cfd(crv):
     ddN = crv[0].derivatives(u, 2)[2]
 
     # Check the second derivative against central finite differences
-    a = +1 * crv[0].coordinates(u - h)
-    b = -2 * crv[0].coordinates(u)
-    c = +1 * crv[0].coordinates(u + h)
+    a = +1 * crv[0].value(u - h)
+    b = -2 * crv[0].value(u)
+    c = +1 * crv[0].value(u + h)
     ddN_fd = (a + b + c) / h ** 2
     assert np.allclose(ddN, ddN_fd, rtol=1e-2)
 
@@ -125,12 +126,12 @@ def test_endpoint_second_derivatives(crv):
     n = crv[0].n
 
     dba = p * (p - 1) / U[p + 1] * (
-                1 / U[p + 2] * (W[2] / W[0]) * (P[:, 2] - P[:, 0]) - (1 / U[p + 1] + 1 / U[p + 2]) * (W[1] / W[0]) * (
-                    P[:, 1] - P[:, 0])) + 2 * (p / U[p + 1]) ** 2 * (W[1] / W[0]) * (1 - W[1] / W[0]) * (
-                      P[:, 1] - P[:, 0])
+            1 / U[p + 2] * (W[2] / W[0]) * (P[:, 2] - P[:, 0]) - (1 / U[p + 1] + 1 / U[p + 2]) * (W[1] / W[0]) * (
+            P[:, 1] - P[:, 0])) + 2 * (p / U[p + 1]) ** 2 * (W[1] / W[0]) * (1 - W[1] / W[0]) * (
+                  P[:, 1] - P[:, 0])
     dea = p * (p - 1) / (1 - U[n]) * (1 / (1 - U[n - 1]) * (W[n - 2] / W[n]) * (P[:, n - 2] - P[:, n]) - (
-                1 / (1 - U[n]) + 1 / (1 - U[n - 1])) * (W[n - 1] / W[n]) * (P[:, n - 1] - P[:, n])) + 2 * (
-                      p / (1 - U[n])) ** 2 * (W[n - 1] / W[n]) * (1 - W[n - 1] / W[n]) * (P[:, n - 1] - P[:, n])
+            1 / (1 - U[n]) + 1 / (1 - U[n - 1])) * (W[n - 1] / W[n]) * (P[:, n - 1] - P[:, n])) + 2 * (
+                  p / (1 - U[n])) ** 2 * (W[n - 1] / W[n]) * (1 - W[n - 1] / W[n]) * (P[:, n - 1] - P[:, n])
 
     assert np.allclose(dbn.flatten(), dba)
     assert np.allclose(den.flatten(), dea)
@@ -160,10 +161,6 @@ def test_endpoint_curvature(crv):
     assert cen == pytest.approx(cea)
 
 
-
-
-
-
 @pytest.mark.parametrize("u", np.linspace(0, 1, 9).tolist())
 class TestParametrized:
     def test_curvature(self, crv, u):
@@ -171,7 +168,7 @@ class TestParametrized:
         assert crv[0].curvature(u) == pytest.approx(1 / crv[1])
 
     def test_coordinates(self, crv, u):
-        evalpt = crv[0].coordinates(u)
+        evalpt = crv[0].value(u)
         angle = u * 2 * pi
         assert np.allclose(evalpt, crv[1] * np.array([[cos(angle)], [sin(angle)]]))
 
@@ -218,7 +215,6 @@ def test_individual_nurbs_basis_functions_first_derivative(crv):
 
 
 def test_individual_nurbs_basis_functions_second_derivative(crv):
-
     h = 1e-4
     hh = h + h ** 2
     Nu = 100

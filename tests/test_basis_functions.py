@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from nurbs import basis_polynomials, basis_polynomials_derivatives
+from bspline_basis_functions import basis_polynomials, basis_polynomials_derivatives
 
 
 @pytest.fixture()
