@@ -18,13 +18,20 @@ def crv(request):
     circle = Curve(2, ctrlpts.T, knots, weights)
     return circle, request.param
 
-def test_generate_knot():
-    ctrlpts = np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
-                                       dtype=float)
-    a = 1 / sqrt(2)
-    weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
-    circle = Curve(2, ctrlpts.T, weights=weights)
-    assert np.allclose(circle.U.size, np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float).size)
+
+@pytest.mark.parametrize('m', [0, 1, 10])
+def test_scale(crv, m):
+    pts = 1.0 * crv[0].P
+    crv[0].scale(m)
+    assert np.allclose(crv[0].P, m * pts, rtol=1e-3)
+
+
+@pytest.mark.parametrize('m', [np.array([0, 1]), np.array([1, 0]), np.array([1, 1])])
+def test_translate(crv, m):
+    pts = 1.0 * crv[0].P
+    crv[0].translate(m)
+    assert np.allclose(crv[0].P, pts + m[:, np.newaxis], rtol=1e-3)
+
 
 def test_degree(crv):
     assert crv[0].p == 2
@@ -47,9 +54,6 @@ def test_knots(crv):
 
 def test_ndim(crv):
     assert crv[0].ndim == 2
-
-
-
 
 
 def test_endpoint_interpolation(crv):
@@ -241,3 +245,12 @@ def test_individual_nurbs_basis_functions_second_derivative(crv):
     ddR_fd = (a + b + c) / h ** 2
 
     assert np.allclose(crv[0].basis_nurbs[2], ddR_fd)
+
+
+def test_generate_knot():
+    ctrlpts = np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]],
+                                       dtype=float)
+    a = 1 / sqrt(2)
+    weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
+    circle = Curve(2, ctrlpts.T, weights=weights)
+    assert np.allclose(circle.U.size, np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float).size)

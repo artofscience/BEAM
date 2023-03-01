@@ -71,6 +71,12 @@ class Curve:
         if self.m is not self.n + self.p + 1:
             raise Exception('m != n + p + 1')
 
+    def translate(self, vec):
+        self.P += vec[:, np.newaxis]
+
+    def scale(self, multiplier):
+        self.P *= multiplier
+
     def generate_knots(self):
         """Generates an equally-spaced knot vector.
         m = n + 1 + p
