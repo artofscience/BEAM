@@ -18,26 +18,25 @@ def L(request):
 def line(p, L):
     ctrlpts = np.zeros([2, p + 1], dtype=float)
     ctrlpts[0, :] = np.linspace(0, L, p + 1)
-    knots = np.zeros(2 * (p + 1), dtype=float)
-    knots[p+1::] = 1
-    myline = Beam(p, ctrlpts, knots)
+    myline = Beam(p, ctrlpts)
+    myline.generate_knots()
     return myline, L
 
 
 @pytest.fixture()
 def circle(L):
-    ctrlpts = L * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]], dtype=float)
+    ctrlpts = L / (2*pi) * np.array([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]], dtype=float)
     a = 1 / sqrt(2)
     weights = np.array([1, a, 1, a, 1, a, 1, a, 1], dtype=float)
     knots = np.array([0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1], dtype=float)
     circle2 = Beam(2, ctrlpts.T, knots, weights)
 
     knots = np.array([0, 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1, 1], dtype=float)
-    ctrlpts = L * np.array([[1, 0], [1, 2], [-1, 2], [-1, 0], [-1, -2], [1, -2], [1, 0]], dtype=float)
+    ctrlpts = L / (2*pi) * np.array([[1, 0], [1, 2], [-1, 2], [-1, 0], [-1, -2], [1, -2], [1, 0]], dtype=float)
     a = 1 / 3
     weights = np.array([1, a, a, 1, a, a, 1], dtype=float)
     circle3 = Beam(3, ctrlpts.T, knots, weights)
-    return [circle2, circle3], 2 * pi * L
+    return [circle2, circle3], L
 
 
 def test_arclength_line_quadrature(line):
@@ -47,6 +46,17 @@ def test_arclength_line_quadrature(line):
 def test_arclength_circle_quadrature(circle):
     for idx, i in enumerate(circle[0]):
         assert i.arclength() == pytest.approx(circle[1], 1e-3)
+
+
+def test_arclength_line_gauss(line):
+    L = line[0].integrate(line[0].arclength_differential, line[0].p, 0, 1)
+    assert np.allclose(L, line[1])
+
+
+def test_arclength_circle_gauss(circle):
+    for idx, i in enumerate(circle[0]):
+        L = i.integrate(i.arclength_differential, i.p, 0, 1)
+        assert np.allclose(L, circle[1], 1e-2)
 
 
 def test_arclength_line_hpr(line):

@@ -1,13 +1,11 @@
 from dataclasses import dataclass
+from math import sqrt
 
 import numpy as np
-from nurbs import Curve
 from scipy import integrate
 
-from scipy import sparse
-import warnings
+from nurbs import Curve
 
-from bspline_basis_functions import basis_polynomials, basis_polynomials_derivatives
 
 @dataclass
 class Config:
@@ -77,7 +75,6 @@ class Beam(Curve):
                 B[i] += self.basis_nurbs[1, i, pt]
         return B
 
-
     def assembly(self):
         n = 2 * (self.n + 1)
         B = np.zeros([n, 2, self.int_pts.size], dtype=float)
@@ -98,7 +95,7 @@ class Beam(Curve):
                     x = 2 * j
                     y = x + 2
                     H[v:w, x:y, pt] += self.ddRs[i, pt] * self.dRs[j, pt] * nat ** -1 * (
-                                nat ** -2 * self.R @ A - self.R)
+                            nat ** -2 * self.R @ A - self.R)
                     H[v:w, x:y, pt] += self.ddRs[j, pt] * self.dRs[i, pt] * nat ** -1 * self.R - nat ** -3 * A @ self.R
                     z = self.dRs[i, pt] * self.dRs[j, pt] * nat ** -3
                     H[v:w, x:y, pt] += z * np.dot(dat, self.R @ at) * np.identity(2)
@@ -108,7 +105,6 @@ class Beam(Curve):
         self.B = B
         self.H = H
         return B, H
-
 
     def arclength(self, u1=0.00, u2=1.00):
 
@@ -141,6 +137,45 @@ class Beam(Curve):
         dCdu = self.derivatives(u, up_to_order=1)[1, ...]
         dLdu = np.sqrt(np.sum(dCdu ** 2, axis=0))  # dL/du = [(dx_0/du)^2 + ... + (dx_n/du)^2]^(1/2)
         return dLdu
+
+
+    def integrate(self, func, n, a, b):
+        w, pt = self.gauss_values(n)
+        x = np.zeros_like(func(0))
+
+        for j in range(self.nks):
+            a = self.U_unique[j]
+            b = self.U_unique[j + 1]
+            c = (b - a) / 2
+            d = (a + b) / 2
+            for i in range(n):
+                x += (b - a) / 2 * w[i] * func(c * pt[i] + d)
+        return x
+
+    @staticmethod
+    def gauss_values(n):
+        w = []
+        pt = []
+        match n:
+            case 1:
+                w = [2]
+                pt = [0]
+            case 2:
+                w = [1, 1]
+                pt = [-1 / sqrt(3), 1 / sqrt(3)]
+            case 3:
+                w = [5 / 9, 8 / 9, 5 / 9]
+                pt = [-sqrt(3 / 5), 0, sqrt(3 / 5)]
+            case 4:
+                w = [(18 + sqrt(30)) / 36, (18 + sqrt(30)) / 36, (18 - sqrt(30)) / 36, (18 - sqrt(30)) / 36]
+                pt = [-sqrt(3 / 7 - 2 / 7 * (sqrt(6 / 5))), sqrt(3 / 7 - 2 / 7 * (sqrt(6 / 5))),
+                      - sqrt(3 / 7 + 2 / 7 * (sqrt(6 / 5))), sqrt(3 / 7 + 2 / 7 * (sqrt(6 / 5)))]
+            case 5:
+                w = [(322 + 13 * sqrt(70)) / 900, (322 + 13 * sqrt(70)) / 900, 128 / 225, (322 - 13 * sqrt(70)) / 900,
+                     (322 - 13 * sqrt(70)) / 900]
+                pt = [-1 / 3 * sqrt(5 - 2 * sqrt(10 / 7)), 1 / 3 * sqrt(5 - 2 * sqrt(10 / 7)), 0,
+                      - 1 / 3 * sqrt(5 + 2 * sqrt(10 / 7)), 1 / 3 * sqrt(5 + 2 * sqrt(10 / 7))]
+        return w, pt
 
 
 class Quadrature:
